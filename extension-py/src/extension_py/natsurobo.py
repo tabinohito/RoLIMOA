@@ -1,20 +1,22 @@
 import socket
 import threading
-import time
+import time  # timeモジュールのインポート
 from rolimoa_extension import RoLIMOAExtension
 from led_controller import LedController
+from datetime import datetime  # datetimeモジュールを使う
+import asyncio
 
 class LedStatus:
     def __init__(self):
         self.colors = {}  # IPアドレスごとに色を管理する辞書
 
-    def set_color(self, ip, color,len = None):
+    def set_color(self, ip, color, length=None):
         """特定のIPアドレスに対して色を設定"""
         self.colors[ip] = color
 
     def get_color(self, ip):
         """特定のIPアドレスに対応する色を取得。存在しない場合は黒を返す。"""
-        return self.colors.get(ip, [0, 0, 0]) , 
+        return self.colors.get(ip, [0, 0, 0])
 
 class LedControllerWithThreads(LedController):
     def __init__(self):
@@ -23,6 +25,8 @@ class LedControllerWithThreads(LedController):
         self.lock = threading.Lock()  # スレッド間でのデータ競合を防ぐためのロック
         self.stop_event = threading.Event()  # サーバ停止用のイベント
         self.threads = []  # クライアントごとのスレッド管理
+        self.loop = asyncio.new_event_loop()  # asyncioイベントループを作成
+        threading.Thread(target=self.loop.run_forever).start()  # 非同期タスク用のスレッドを開始
 
     def start(self):
         """サーバーを開始する"""
@@ -49,7 +53,7 @@ class LedControllerWithThreads(LedController):
             while not self.stop_event.is_set():
                 with self.lock:
                     color = self.led_status.get_color(ip)  # 現在のLEDの色を取得
-                client_socket.send(self.generate_msg(200, color))  # クライアントにメッセージを送信
+                client_socket.send(self.generate_msg(200, 0, color))  # クライアントにメッセージを送信
                 time.sleep(0.1)
         except Exception as e:
             print(f"Error with {client_address}: {e}")
@@ -59,9 +63,18 @@ class LedControllerWithThreads(LedController):
 
     def set_color_for_ip(self, ip, color):
         """LEDの色を設定"""
-        with self.lock:          
+        with self.lock:
             print(f"Setting color for {ip} to {color}")
-            self.led_status.set_color(ip,color)
+            self.led_status.set_color(ip, color)
+
+    async def turn_off_after_delay(self, ip, delay=10):
+        """指定したIPのLEDを一定時間後に消灯"""
+        for i in range(delay):
+            await asyncio.sleep(1)  # 指定時間だけ待機
+            print(f"Turning off LED for {ip} in {delay - i} seconds")
+        with self.lock:
+            self.led_status.set_color(ip, [0, 0, 0])  # 消灯
+        print(f"Turned off LED for {ip}")
 
     def stop(self):
         """サーバーを停止するための関数"""
@@ -74,6 +87,8 @@ class LedControllerWithThreads(LedController):
         for thread in self.threads:
             thread.join(timeout=2.0)  # 各スレッドが確実に終了するのを待つ（タイムアウト付き）
 
+        self.loop.call_soon_threadsafe(self.loop.stop)  # イベントループを停止
+
 def start_extension_connection(extension):
     """RoLIMOAExtensionの接続を別スレッドで実行"""
     extension.connect()
@@ -83,6 +98,7 @@ if __name__ == '__main__':
 
     extension = RoLIMOAExtension(
         url="ws://localhost:8000/ws"
+        # url="ws://192.168.11.40:8000/ws"
     )
 
     @extension.on_dispatch("task/setTaskUpdate")
@@ -94,23 +110,28 @@ if __name__ == '__main__':
         print(f"{fieldSide}チームの{taskObject}が{afterValue}に更新されました")
 
         # IPアドレスに応じて色を設定（例として適当なIPアドレスを使用）
+        ip_address = None
         if fieldSide == "red":
             ip_address = "192.168.1.100"  # 実際のクライアントのIPアドレスを指定
-            print(fieldSide)
-            color = led_controller.led_status.get_color(ip_address)
-            if color == [0xFF, 0x00, 0x00]:
-                led_controller.set_color_for_ip(ip_address, [0x00, 0x00, 0x00])
-            else:
-                led_controller.set_color_for_ip(ip_address, [0xFF, 0x00, 0x00])  # 赤色
 
         elif fieldSide == "blue":
             ip_address = "192.168.1.101"  # 実際のクライアントのIPアドレスを指定
             print(fieldSide)
-            color = led_controller.led_status.get_color(ip_address)
-            if color == [0x00, 0x00, 0xFF]:
-                led_controller.set_color_for_ip(ip_address, [0x00, 0x00, 0x00])
+
+        # 加熱の場合
+        if taskObject == "heating":
+            if afterValue == 1:
+                # LEDを赤色に点灯
+                led_controller.set_color_for_ip(ip_address, [255, 75, 0x00])
+
+                # 10秒後に非同期で消灯
+                asyncio.run_coroutine_threadsafe(
+                    led_controller.turn_off_after_delay(ip_address, delay=10),
+                    led_controller.loop
+                )
             else:
-                led_controller.set_color_for_ip(ip_address, [0x00, 0x00, 0xFF])  # 赤色
+                # LEDをすぐに消灯
+                led_controller.set_color_for_ip(ip_address, [0x00, 0x00, 0x00])
 
     @extension.on_dispatch("task/setGlobalUpdate")
     def on_global_update(payload: dict):
