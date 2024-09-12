@@ -32,10 +32,10 @@ class LedController:
 
     def default_func(self, client_socket):
         # LEDメッセージ送信処理
-        client_socket.send(self.generate_msg(200, [0x00, 0x00, 0xFF]))
+        client_socket.send(self.generate_msg(200, 0, [0x00, 0x00, 0xFF]))
         time.sleep(0.1)
 
-        client_socket.send(self.generate_msg(200, [0x00, 0x00, 0x00]))
+        client_socket.send(self.generate_msg(200, 0, [0x00, 0x00, 0x00]))
         time.sleep(0.1)
 
     def start(self,function=None):
@@ -55,8 +55,8 @@ class LedController:
                 # タイムアウト時にstop_eventをチェック
                 continue
 
-    def generate_msg(self, led_num, colors):
-        msg = [0x55, led_num]
+    def generate_msg(self, led_num, index, colors):
+        msg = [0x55, led_num, index]
         msg.extend(colors)
         msg.append(0xAA)
         return bytes(msg)  # バイト列に変換
