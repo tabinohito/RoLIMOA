@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "google>=3.0.0",
     "httpx-ws>=0.7.1",
 ]
 

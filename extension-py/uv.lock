@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.10"
 
 [[package]]
@@ -294,6 +293,7 @@ name = "rolimoa-extension"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "google" },
     { name = "httpx-ws" },
 ]
 
@@ -305,11 +305,11 @@ google-spreadsheet = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google", specifier = ">=3.0.0" },
     { name = "google", marker = "extra == 'google-spreadsheet'", specifier = ">=3.0.0" },
     { name = "gspread", marker = "extra == 'google-spreadsheet'", specifier = ">=6.2.0" },
     { name = "httpx-ws", specifier = ">=0.7.1" },
 ]
-provides-extras = ["google-spreadsheet"]
 
 [[package]]
 name = "rsa"
